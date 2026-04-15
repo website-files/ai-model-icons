@@ -1,0 +1,67 @@
+name: Collect Root Files Metadata
+
+on:
+  push:
+    branches:
+      - main  # Change to your target branch
+  workflow_dispatch:
+
+jobs:
+  generate-metadata:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        # Using GITHUB_TOKEN here means the commit-back push
+        # will NOT trigger this workflow again [web:12]
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate generated_metadata.json
+        run: |
+          python3 - <<'EOF'
+          import os, json
+
+          # Files to exclude from collection
+          EXCLUDE = {
+            "README.md",
+            "LICENSE",
+            "LICENSE.md",
+            "LICENSE.txt",
+            ".gitignore",
+            "generated_metadata.json",
+            "CHANGELOG.md",
+            "CONTRIBUTING.md",
+            "CODE_OF_CONDUCT.md",
+          }
+
+          files = [
+            f for f in os.listdir(".")
+            if os.path.isfile(f)
+            and not f.startswith(".")
+            and f not in EXCLUDE
+          ]
+          files.sort()
+
+          metadata = {"files": files}
+          with open("generated_metadata.json", "w") as out:
+            json.dump(metadata, out, indent=2)
+            out.write("\n")
+
+          print(f"Collected {len(files)} files: {files}")
+          EOF
+
+      - name: Commit generated_metadata.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add generated_metadata.json
+
+          # Only commit if there are actual changes
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore: update generated_metadata.json [skip ci]"
+            git push
+          fi
